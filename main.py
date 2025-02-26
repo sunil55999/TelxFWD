@@ -1,20 +1,37 @@
 import asyncio
 import logging
 from telethon import TelegramClient, events
+from flask import Flask
+import threading
 
-# Bot credentials
+# Bot credentials (Replace with your actual credentials)
 API_ID = 28507153  # Replace with your API ID
 API_HASH = "68391d8f84e503d36bc49f0215148b67"  # Replace with your API hash
 BOT_TOKEN = "7501256326:AAHRrZa2-OtHqub_axwvBv1dvzWL8WAAc7I"  # Replace with your bot token
 
-# Initialize the Telegram bot client
+# Initialize Telegram Client
 client = TelegramClient("bot", API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
-# Dictionary to store multiple source and destination mappings with names
+# Dictionary to store user-based forwarding pairs
 channel_mappings = {}
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ForwardBot")
+
+# Flask app for Koyeb health check
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!", 200
+
+def run_web_server():
+    app.run(host="0.0.0.0", port=8000)
+
+# Start Flask web server in a separate thread
+threading.Thread(target=run_web_server, daemon=True).start()
+
+# ----------------------- Telegram Bot Commands -----------------------
 
 @client.on(events.NewMessage(pattern='/start'))
 async def start(event):
@@ -23,26 +40,24 @@ async def start(event):
 @client.on(events.NewMessage(pattern='/commands'))
 async def list_commands(event):
     commands = """
-    📌 Available Commands:
-    /setpair <name> <source> <destination> - Add a forwarding pair
-    /listpairs - List all forwarding pairs
-    /pausepair <name> - Pause a forwarding pair
-    /startpair <name> - Resume a forwarding pair
-    /clearpairs - Clear all forwarding pairs
-    """
+📌 Available Commands:
+🔹 /setpair <name> <source> <destination> - Add a forwarding pair
+🔹 /listpairs - List all forwarding pairs
+🔹 /pausepair <name> - Pause a forwarding pair
+🔹 /startpair <name> - Resume a forwarding pair
+🔹 /clearpairs - Clear all forwarding pairs
+"""
     await event.reply(commands)
 
 @client.on(events.NewMessage(pattern='/setpair (.+) (.+) (.+)'))
 async def set_pair(event):
-    pair_name = event.pattern_match.group(1)
-    source = event.pattern_match.group(2)
-    destination = event.pattern_match.group(3)
     user_id = event.sender_id
+    pair_name, source, destination = event.pattern_match.group(1), event.pattern_match.group(2), event.pattern_match.group(3)
 
     if user_id not in channel_mappings:
         channel_mappings[user_id] = {}
+    
     channel_mappings[user_id][pair_name] = {'source': source, 'destination': destination, 'active': True}
-
     await event.reply(f"✅ Forwarding pair '{pair_name}' added: {source} → {destination}")
 
 @client.on(events.NewMessage(pattern='/listpairs'))
@@ -56,8 +71,9 @@ async def list_pairs(event):
 
 @client.on(events.NewMessage(pattern='/pausepair (.+)'))
 async def pause_pair(event):
-    pair_name = event.pattern_match.group(1)
     user_id = event.sender_id
+    pair_name = event.pattern_match.group(1)
+    
     if user_id in channel_mappings and pair_name in channel_mappings[user_id]:
         channel_mappings[user_id][pair_name]['active'] = False
         await event.reply(f"⏸️ Forwarding pair '{pair_name}' paused.")
@@ -66,8 +82,9 @@ async def pause_pair(event):
 
 @client.on(events.NewMessage(pattern='/startpair (.+)'))
 async def start_pair(event):
-    pair_name = event.pattern_match.group(1)
     user_id = event.sender_id
+    pair_name = event.pattern_match.group(1)
+    
     if user_id in channel_mappings and pair_name in channel_mappings[user_id]:
         channel_mappings[user_id][pair_name]['active'] = True
         await event.reply(f"▶️ Forwarding pair '{pair_name}' resumed.")
@@ -83,6 +100,8 @@ async def clear_pairs(event):
     else:
         await event.reply("⚠️ No forwarding pairs were found.")
 
+# ----------------------- Message Forwarding -----------------------
+
 @client.on(events.NewMessage)
 async def forward_messages(event):
     user_id = event.sender_id
@@ -90,6 +109,8 @@ async def forward_messages(event):
         for pair_name, mapping in channel_mappings[user_id].items():
             if mapping['active'] and event.chat_id == int(mapping['source']):
                 await client.send_message(int(mapping['destination']), event.message)
+
+# ----------------------- Run Telegram Client -----------------------
 
 async def main():
     print("🚀 Bot is running! Use /setpair to configure forwarding.")

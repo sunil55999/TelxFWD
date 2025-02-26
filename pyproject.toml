@@ -1,5 +1,6 @@
 
 [tool.poetry]
+package-mode = false
 name = "python-template"
 version = "0.1.0"
 description = ""

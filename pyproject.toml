@@ -1,0 +1,12 @@
+
+[tool.poetry]
+name = "python-template"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+
+[tool.poetry.dependencies]
+python = ">=3.11"
+python-telegram-bot = "^21.10"
+telethon = ">=1.39.0"
+python-dotenv = "^1.0.1"
